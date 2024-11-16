@@ -14,6 +14,8 @@ import os
 import requests
 
 def download_file(url, destination):
+    # Ensure the directory exists before saving the file
+    os.makedirs(os.path.dirname(destination), exist_ok=True)
     if not os.path.exists(destination):
         response = requests.get(url)
         response.raise_for_status()  # Raise an error on bad status
