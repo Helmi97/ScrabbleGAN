@@ -1,0 +1,11 @@
+lmdb
+matplotlib
+numpy
+opencv_python
+opencv_python_headless
+pandas
+Pillow
+torch
+torchvision
+tqdm
+kiwisolver
