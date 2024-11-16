@@ -13,16 +13,14 @@ from PIL import Image, ImageEnhance, ImageDraw
 import os
 import requests
 
+import gdown
+
 def download_file(url, destination):
-    # Ensure the directory exists before saving the file
     directory = os.path.dirname(destination)
     if directory:
         os.makedirs(directory, exist_ok=True)
     if not os.path.exists(destination):
-        response = requests.get(url)
-        response.raise_for_status()  # Raise an error on bad status
-        with open(destination, 'wb') as f:
-            f.write(response.content)
+        gdown.download(url, destination, quiet=False)
 
 class DataGenerator:
     def __init__(self, dataset='IAM', config=Config, device='cpu'):
