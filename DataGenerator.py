@@ -40,14 +40,14 @@ class DataGenerator:
             lexicon_file = 'data/Lexicon/words.txt'
             checkpt_url = 'https://drive.google.com/uc?id=11w1p8RVLml9cidMrkQpdo648pNPdQFxZ'
             char_map_url = 'https://drive.google.com/uc?id=10bXCFp7a7MyUFKR55rUeqWNrEe2300TP'
-            lexicon_url = 'https://github.com/dwyl/english-words/blob/master/words.txt'
+            lexicon_url = 'https://raw.githubusercontent.com/dwyl/english-words/master/words.txt'
         elif dataset == 'RIMES':
             checkpt_path = 'RIMES_best_checkpoint.tar'
             char_map_path = 'RIMES_char_map.pkl'
             lexicon_file = 'data/Lexicon/Lexique383.tsv'
             checkpt_url = 'https://drive.google.com/uc?id=16oasVsBExwHhCmYDSR1uhV10NiWYZ-OY'
             char_map_url = 'https://drive.google.com/uc?id=1vjj7DfT_T3c4q-18LNpo7YMcRCUnh7aF'
-            lexicon_url = 'https://github.com/AdrienVannson/Decorrecteur/blob/master/Lexique383'
+            lexicon_url = 'https://raw.githubusercontent.com/AdrienVannson/Decorrecteur/refs/heads/master/Lexique383'
         else:
             raise ValueError("Unsupported dataset. Choose 'IAM' or 'RIMES'.")
 
