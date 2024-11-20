@@ -12,12 +12,24 @@ import random
 from PIL import Image, ImageEnhance, ImageDraw
 import os
 import requests
+
 import gdown
+
+def download_file(url, destination):
+    directory = os.path.dirname(destination)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    if not os.path.exists(destination):
+        gdown.download(url, destination, quiet=False)
 
 class DataGenerator:
     def __init__(self, dataset='IAM', config=Config, device='cpu'):
         """
         Initializes the DataGenerator class by loading the character map and model.
+
+        :param dataset: Name of the dataset ('IAM' or 'RIMES').
+        :param config: Config object containing model parameters.
+        :param device: Device on which the model should run ('cpu' or 'cuda').
         """
         # Set dataset-specific paths and download if necessary
         if dataset == 'IAM':
@@ -38,9 +50,9 @@ class DataGenerator:
             raise ValueError("Unsupported dataset. Choose 'IAM' or 'RIMES'.")
 
         # Download files if they do not exist
-        self.download_file(checkpt_url, checkpt_path)
-        self.download_file(char_map_url, char_map_path)
-        self.download_file(lexicon_url, lexicon_file)
+        download_file(checkpt_url, checkpt_path)
+        download_file(char_map_url, char_map_path)
+        download_file(lexicon_url, lexicon_file)
 
         # Load character map
         with open(char_map_path, 'rb') as f:
@@ -54,82 +66,157 @@ class DataGenerator:
         self.img_generator = ImgGenerator(checkpt_path=checkpt_path, config=config, char_map=char_map)
         self.z_dist = torch.distributions.Normal(loc=0, scale=1.)
 
-    @staticmethod
-    def download_file(url, destination):
-        directory = os.path.dirname(destination)
-        if directory:
-            os.makedirs(directory, exist_ok=True)
-        if not os.path.exists(destination):
-            gdown.download(url, destination, quiet=False)
-
     def _rescale_image(self, img):
         """
         Rescales an image from range [-1, 1] to [0, 255].
+
+        :param img_array: Numpy array representing the image.
+        :return: Rescaled image in numpy array format.
         """
         return ((img + 1) * 127.5).clip(0, 255).astype(np.uint8)
-
+    
     def _resize_image(self, img, factor=1.2):
         """
         Resizes the given image by a specific factor.
+
+        :param img: Numpy array representing the image.
+        :param factor: The factor by which to resize the image.
+        :return: Resized image.
         """
         new_width = int(img.shape[1] * factor)
         new_height = int(img.shape[0] * factor)
         return np.array(Image.fromarray(img).resize((new_width, new_height), Image.LANCZOS))
 
+
     def generate_image(self, text, seed=None):
         """
-        Generates an image for a given text, splitting into words if there are spaces.
+        Generates an image for a given word using the ImgGenerator.
+
+        :param text: A single word as a string.
+        :param seed: Seed for generating style variations. If None, a random seed is used.
+        :return: Generated image in numpy array format.
         """
         if not isinstance(text, str):
-            raise ValueError("Input must be a string.")
+            raise ValueError("Input must be a string representing a single word.")
 
         if text == "":
             # Return an empty white image for empty strings
             return np.full((32, 32), fill_value=255, dtype=np.uint8)
-
-        # Split text by spaces to generate each word separately
-        words = text.split()
 
         # Set random seed for reproducibility
         seed = random.randint(0, 10000) if seed is None else seed
         torch.manual_seed(seed)
         z = self.z_dist.sample([128]).unsqueeze(0)
 
-        # Generate images for each word
-        generated_imgs, _, _ = self.img_generator.generate(word_list=words, z=z)
-        
-        # Concatenate all generated word images horizontally
-        word_images = [self._rescale_image(img) for img in generated_imgs]
-        concatenated_image = self.concatenate_word_images(word_images)
+        # Generate image
+        generated_imgs, _, _ = self.img_generator.generate(word_list=[text], z=z)
+        return self._rescale_image(generated_imgs[0]) if generated_imgs.size > 0 else None
 
-        return concatenated_image
-
-    def concatenate_word_images(self, word_images, space_width=20):
+    def generate_empty_row(self, width=1225, height=84, column_structure=None):
         """
-        Concatenates word images with spaces between them.
+        Generates an empty row image without vertical lines for columns.
 
-        :param word_images: List of word images to concatenate.
-        :param space_width: Width of the space between words.
-        :return: Concatenated image.
+        :param width: Width of the entire row.
+        :param height: Height of the row.
+        :param column_structure: List of column widths.
+        :return: Empty row image.
         """
-        # Determine total width and height
-        total_width = sum(img.shape[1] for img in word_images) + space_width * (len(word_images) - 1)
-        max_height = max(img.shape[0] for img in word_images)
+        # Create an empty white image
+        return Image.new('L', (width, height), color=255)
 
-        # Create an empty white image to serve as the background
-        concatenated_image = np.full((max_height, total_width), fill_value=255, dtype=np.uint8)
+    def add_image_to_row(self, row_image, word_image, x_offset, y_offset):
+        """
+        Adds a word image to a specific cell in the row image.
 
-        # Paste each word image onto the concatenated image
+        :param row_image: The empty row image without column separators.
+        :param word_image: The generated word image to be added.
+        :param x_offset: Horizontal offset for positioning the word.
+        :param y_offset: Vertical offset for positioning the word.
+        :return: The updated row image with the word added.
+        """
+        row_pil = Image.fromarray(row_image)
+        word_pil = Image.fromarray(word_image)
+
+        # Calculate position for the word image within the row
+        x = int(max(0, x_offset))
+        y = int(max(0, (row_image.shape[0] - word_image.shape[0]) // 2 + y_offset))
+
+        # Paste the word image onto the row image
+        row_pil.paste(word_pil, (x, y), word_pil if word_pil.mode == 'RGBA' else None)
+        return np.array(row_pil)
+
+    def draw_vertical_lines(self, row_image, column_structure):
+        """
+        Draw vertical lines for column separators after adding the word images.
+
+        :param row_image: The row image after adding word images.
+        :param column_structure: List of column widths.
+        :return: Row image with vertical lines added.
+        """
+        row_pil = Image.fromarray(row_image)
+        draw = ImageDraw.Draw(row_pil)
+
+        # Draw vertical lines for column separators
+        if column_structure is not None:
+            x_offset = 0
+            for col_width in column_structure:
+                x_offset += col_width
+                draw.line([(x_offset, 0), (x_offset, row_pil.height)], fill=0)
+
+        return np.array(row_pil)
+
+    def generate_row(self, row_height, row_width, columns, seed=None, background_color=255):
+        """
+        Generates a row of images for a list of column dictionaries, concatenated horizontally with an empty row background.
+        Adds images to each cell with specified offsets for realism.
+
+        :param row_height: Height of the entire row image.
+        :param row_width: Width of the entire row image.
+        :param columns: List of dictionaries defining each column's properties ('name', 'width', 'content', etc.).
+        :param seed: Seed for generating style variations.
+        :param background_color: Background color for padding (default is 255 for white).
+        :return: Final row image with words added and vertical lines drawn.
+        """
+        # Generate an empty row without vertical lines
+        row_image = np.array(self.generate_empty_row(width=row_width, height=row_height))
+
+        # Set random seed for reproducibility
+        seed = random.randint(0, 10000) if seed is None else seed
+        random.seed(seed)
+
+        # Generate and add images for each column's content in the corresponding cell
         x_offset = 0
-        for word_img in word_images:
-            concatenated_image[:word_img.shape[0], x_offset:x_offset + word_img.shape[1]] = word_img
-            x_offset += word_img.shape[1] + space_width
+        for column in columns:
+            text = column.get('content', '')
+            x_translation = column.get('x_translation', 0)
+            y_translation = column.get('y_translation', 0)
+            resize_factor = column.get('resize_factor', 1.0)
 
-        return concatenated_image
+            # Generate word image
+            word_image = self.generate_image(text, seed=seed)
+            
+            if word_image is not None:
+                # Resize image if resize factor is provided
+                if resize_factor != 1.0:
+                    word_image = self._resize_image(word_image, factor=resize_factor)
+
+                # Add word image to the appropriate cell in the row
+                row_image = self.add_image_to_row(row_image, word_image, x_offset + x_translation, y_translation)
+
+            # Update x_offset based on column width
+            x_offset += column['width']
+
+        # Draw vertical lines after adding word images
+        row_image = self.draw_vertical_lines(row_image, [col['width'] for col in columns])
+
+        return row_image
 
     def generate_rows(self, column_structure, table):
         """
         Generates a row image for each row in the dataframe and saves it to the path specified in the 'image_path' column.
+
+        :param column_structure: List of dictionaries representing the column structure.
+        :param table: A pandas DataFrame containing one row for each image, with a column 'image_path' specifying where to save the image.
         """
         for index, row in table.iterrows():
             columns = []
@@ -156,3 +243,39 @@ class DataGenerator:
             image_path = row['image_path']
             Image.fromarray(row_image).save(image_path)
 
+if __name__ == "__main__":
+    # Create an instance of DataGenerator
+    data_gen = DataGenerator(dataset='IAM')
+
+    # Define column properties as dictionaries
+    column_structure = [
+        {'name': 'NOMS DE FAMILLE', 'width': 220},
+        {'name': 'PRENOMS', 'width': 186},
+        {'name': 'ANNEE de NAISSANCE', 'width': 80},
+        {'name': 'LIEU de NAISSANCE', 'width': 158},
+        {'name': 'NATIONALITE', 'width': 105},
+        {'name': 'ETAT MATRIMONIAL', 'width': 38},
+        {'name': 'SITUATION PAR RAPPORT au chef de ménage', 'width': 110},
+        {'name': 'DEGRE D INSTRUCTION', 'width': 38},
+        {'name': 'PROFESSION', 'width': 156},
+        {'name': 'REMARQUES', 'width': 134}
+    ]
+
+    # Create a sample DataFrame
+    data = {
+        'NOMS DE FAMILLE': ['Levy'],
+        'PRENOMS': ['Charles'],
+        'ANNEE de NAISSANCE': ['76'],
+        'LIEU de NAISSANCE': ['Paris'],
+        'NATIONALITE': ['Francaise'],
+        'ETAT MATRIMONIAL': ['m'],
+        'SITUATION PAR RAPPORT au chef de ménage': ['Chef'],
+        'DEGRE D INSTRUCTION': [''],
+        'PROFESSION': ['hotelier'],
+        'REMARQUES': [''],
+        'image_path': ['generated_row_image_1.png']
+    }
+    table = pd.DataFrame(data)
+
+    # Generate rows and save the images
+    data_gen.generate_rows(column_structure=column_structure, table=table)
