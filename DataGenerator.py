@@ -77,7 +77,7 @@ class DataGenerator:
         new_height = int(img.shape[0] * factor)
         return np.array(Image.fromarray(img).resize((new_width, new_height), Image.LANCZOS))
 
-    def _stitch_images(self, images, padding=-6):
+    def _stitch_images(self, images, padding=-4):
         """
         Stitches a list of word images together horizontally to create a full line image.
         
