@@ -216,7 +216,7 @@ class DataGenerator:
             row_image = self.generate_row(row_height=84, row_width=sum([col['width'] for col in column_structure]), columns=columns)
             image_path = row['image_path']
             Image.fromarray(row_image).save(image_path)
-            Print('Image saved to '+ image_path)
+            print('Image saved to '+ image_path)
 
 
 if __name__ == "__main__":
