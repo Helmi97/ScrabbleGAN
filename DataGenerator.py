@@ -1,5 +1,6 @@
 import pickle as pkl
 import matplotlib.pyplot as plt
+from DigitImageGenerator import DigitImageGenerator
 import torch
 import numpy as np
 import pandas as pd
@@ -59,9 +60,11 @@ class DataGenerator:
         config.lexicon_file = lexicon_file
         config.num_chars = 74 if dataset == 'IAM' else 93
 
-        # Initialize ImgGenerator
+        # Initialize Generators
         self.img_generator = ImgGenerator(checkpt_path=checkpt_path, config=config, char_map=char_map)
         self.z_dist = torch.distributions.Normal(loc=0, scale=1.)
+        self.digit_image_generator = DigitImageGenerator()
+        
 
     def _rescale_image(self, img):
         """
@@ -179,8 +182,10 @@ class DataGenerator:
             x_translation = column.get('x_translation', 0)
             y_translation = column.get('y_translation', 0)
             resize_factor = column.get('resize_factor', 1.0)
-
-            word_image = self.generate_image(text, seed=seed)
+            if not text.isdigit():
+                word_image = self.generate_image(text, seed=seed)
+            else:
+                word_image = self.digit_image_generator.create_digits_image(text)
             
             if word_image is not None:
                 if resize_factor != 1.0:
@@ -216,7 +221,6 @@ class DataGenerator:
             row_image = self.generate_row(row_height=84, row_width=sum([col['width'] for col in column_structure]), columns=columns)
             image_path = row['image_path']
             Image.fromarray(row_image).save(image_path)
-            print('Image saved to '+ image_path)
 
 
 if __name__ == "__main__":
@@ -234,22 +238,22 @@ if __name__ == "__main__":
         {'name': 'SITUATION PAR RAPPORT au chef de ménage', 'width': 110},
         {'name': 'DEGRE D INSTRUCTION', 'width': 38},
         {'name': 'PROFESSION', 'width': 156},
-        {'name': 'REMARQUES', 'width': 134}
+        {'name': 'REMARQUES', 'width': 134, 'resize_factor_max': 0.9, 'resize_factor_min': 0.7}
     ]
 
     # Create a sample DataFrame
     data = {
-        'NOMS DE FAMILLE': ['Levy marie'],
+        'NOMS DE FAMILLE': ['Levy'],
         'PRENOMS': ['Charles'],
-        'ANNEE de NAISSANCE': ['76'],
+        'ANNEE de NAISSANCE': ['72'],
         'LIEU de NAISSANCE': ['Paris'],
-        'NATIONALITE': ['Francaise'],
+        'NATIONALITE': ['F'],
         'ETAT MATRIMONIAL': ['m'],
-        'SITUATION PAR RAPPORT au chef de ménage': ['Chef'],
+        'SITUATION PAR RAPPORT au chef de ménage': ['ch'],
         'DEGRE D INSTRUCTION': [''],
         'PROFESSION': ['hotelier'],
-        'REMARQUES': [''],
-        'image_path': ['generated_row_image_1.png']
+        'REMARQUES': ['41254'],
+        'image_path': ['generated.png']
     }
     table = pd.DataFrame(data)
 
