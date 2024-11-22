@@ -10,3 +10,4 @@ torchvision
 tqdm
 kiwisolver
 gdown
+rarfile
